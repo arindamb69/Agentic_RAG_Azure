@@ -1,40 +1,123 @@
 from mcp.server.fastmcp import FastMCP
 import httpx
+import os
+import base64
+import json
+from dotenv import load_dotenv
+from openai import AzureOpenAI
 
-# Stub for Architecture Diagram Generator
+# Load environment variables from backend/.env if available, or .env
+# Try to find .env in parent directories
+current_dir = os.path.dirname(os.path.abspath(__file__))
+backend_env_path = os.path.join(current_dir, "..", "backend", ".env")
+if os.path.exists(backend_env_path):
+    load_dotenv(backend_env_path)
+else:
+    load_dotenv()
+
 mcp = FastMCP("ArchitectureDesigner")
 
+def get_llm_client():
+    """Initializes and returns the AzureOpenAI client."""
+    api_key = os.getenv("AZURE_OPENAI_API_KEY")
+    azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
+    api_version = os.getenv("AZURE_OPENAI_API_VERSION", "2024-08-01-preview")
+
+    if not api_key or not azure_endpoint:
+        raise ValueError("AZURE_OPENAI_API_KEY and AZURE_OPENAI_ENDPOINT must be set in .env")
+
+    return AzureOpenAI(
+        api_key=api_key,
+        api_version=api_version,
+        azure_endpoint=azure_endpoint
+    )
+
+def generate_mermaid_code(client, deployment, description):
+    """Generates Mermaid diagram code using LLM."""
+    system_prompt = """You are an expert software architect and Mermaid.js specialist.
+    Generate a valid Mermaid.js diagram based on the user's description.
+    Return ONLY the Mermaid code block, without markdown backticks (```mermaid ... ```).
+    Start logic immediately with 'graph TD', 'sequenceDiagram', etc.
+    Do not add explanations."""
+    
+    response = client.chat.completions.create(
+        model=deployment,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"Create a system architecture diagram for: {description}"}
+        ],
+        temperature=0.3
+    )
+    return response.choices[0].message.content.strip()
+
+def generate_c4_code(client, deployment, description):
+    """Generates C4-PlantUML diagram code using LLM."""
+    system_prompt = """You are an expert software architect and C4 model specialist.
+    Generate a C4 Context diagram using C4-PlantUML syntax.
+    Return ONLY the PlantUML code, without markdown backticks.
+    Use '!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml'
+    Start with '@startuml' and end with '@enduml'.
+    Do not add explanation."""
+
+    response = client.chat.completions.create(
+        model=deployment,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"Create a C4 System Context diagram for: {description}"}
+        ],
+        temperature=0.3
+    )
+    return response.choices[0].message.content.strip()
+
+def get_mermaid_ink_url(mermaid_code):
+    """Generates a mermaid.ink URL for the given Mermaid code."""
+    # mermaid.ink requires base64 encoding of the state object
+    # Format: https://mermaid.ink/img/<base64_string>
+    # The base64 string is simply the standard base64 encoding of the code structure
+    # Actually, simpler method: just base64 encode the code itself for mermaid.ink/img/
+    # According to mermaid.ink docs: pako deflate + base64url is best, but standard base64 often works for simple cases.
+    # Let's use the simple ascii base64 first.
+    
+    encoded_string = base64.b64encode(mermaid_code.encode("utf-8")).decode("utf-8")
+    return f"https://mermaid.ink/img/{encoded_string}"
+
 @mcp.tool()
-async def generate_diagram(description: str, diagram_type: str = "mermaid") -> str:
+async def generate_diagram(description: str, diagram_type: str = "mermaid", output_format: str = "text") -> str:
     """
     Generates an architecture diagram based on the description.
-    Supported types: 'mermaid', 'c4', 'plantuml'.
-    Returns the code for the diagram.
+    
+    Args:
+        description: Description of the system to design.
+        diagram_type: 'mermaid' or 'c4'.
+        output_format: 'text' (code) or 'image' (url). Note: 'image' only supported for mermaid.
     """
-    
-    if diagram_type.lower() == "mermaid":
-        return f"""
-graph TD
-    User[User] -->|HTTPS| Frontend[React App]
-    Frontend -->|API| Backend[FastAPI Backend]
-    Backend -->|Orchestrates| Agent[AI Agent]
-    Agent -->|Uses| Tools[MCP Tools]
-    Tools -->|Queries| DB[(Azure SQL)]
-    Tools -->|Search| Search[(Azure AI Search)]
-    
-    subgraph "Generated from: {description[:20]}..."
-    end
-"""
-    elif diagram_type.lower() == "c4":
-         return f"""
-C4Context
-    title "System Context Diagram for {description[:20]}..."
-    Person(user, "User", "A user of the system")
-    System(system, "Software System", "Allows users to {description[:20]}...")
-    Rel(user, system, "Uses")
-"""
-    
-    return "Error: Unsupported diagram type. Use 'mermaid' or 'c4'."
+    try:
+        client = get_llm_client()
+        deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4o")
+
+        diagram_code = ""
+        
+        if diagram_type.lower() == "mermaid":
+            raw_code = generate_mermaid_code(client, deployment, description)
+            # Cleanup cleanup if LLM added backticks despite instruction
+            diagram_code = raw_code.replace("```mermaid", "").replace("```", "").strip()
+            
+            if output_format.lower() == "image":
+                image_url = get_mermaid_ink_url(diagram_code)
+                return f"![Architecture Diagram]({image_url})\n\n[Mermaid Code]:\n```mermaid\n{diagram_code}\n```"
+            
+            return diagram_code
+
+        elif diagram_type.lower() == "c4":
+            raw_code = generate_c4_code(client, deployment, description)
+            diagram_code = raw_code.replace("```plantuml", "").replace("```", "").strip()
+            return diagram_code
+        
+        else:
+            return f"Error: Unsupported diagram_type '{diagram_type}'. Use 'mermaid' or 'c4'."
+
+    except Exception as e:
+        return f"Error generating diagram: {str(e)}"
 
 if __name__ == "__main__":
     mcp.run()
