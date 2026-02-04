@@ -8,7 +8,7 @@ class LLMService:
     def __init__(self):
         # Create a custom HTTP client to bypass SSL verification (fix for corporate proxy)
         # Added timeout to prevent connection timeouts
-        self.http_client = httpx.AsyncClient(verify=False, timeout=60.0)
+        self.http_client = httpx.AsyncClient(verify=False, timeout=180.0)
 
         if settings.AZURE_OPENAI_ENDPOINT:
             if settings.AZURE_OPENAI_API_KEY:
