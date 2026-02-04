@@ -1,0 +1,15 @@
+fastapi
+uvicorn
+pydantic
+python-dotenv
+openai
+azure-identity
+azure-search-documents
+azure-storage-blob
+azure-cosmos>=4.0.0
+pymongo
+redis
+httpx
+sse-starlette
+mcp
+pymupdf
