@@ -149,7 +149,30 @@ async def proxy_tool_call(tool_name: str, arguments: dict):
                     if item.get("type") == "text":
                         texts.append(item.get("text"))
                 
-                final_text = "\n".join(texts)
+                if tool_name == "search":
+                    # Optimize search results to save tokens
+                    # The remote tool returns a JSON string inside the text content
+                    try:
+                        raw_json_str = "".join(texts)
+                        data = json.loads(raw_json_str)
+                        if isinstance(data, dict) and "results" in data:
+                            optimized_results = []
+                            for page in data["results"]:
+                                optimized_results.append({
+                                    "id": page.get("id") or page.get("pageId"),
+                                    "title": page.get("title"),
+                                    "url": page.get("url")
+                                })
+                            final_text = json.dumps({"results": optimized_results}, indent=None)
+                            log_debug(f"Optimized search results. Count: {len(optimized_results)}")
+                        else:
+                            final_text = raw_json_str
+                    except:
+                        # Fallback if parsing fails
+                        final_text = "\n".join(texts)
+                else:
+                    final_text = "\n".join(texts)
+
                 log_debug(f"Returning text of length {len(final_text)}: {final_text[:500]}")
                 return final_text
             else:
