@@ -114,7 +114,33 @@ sequenceDiagram
     Orch->>User: Stream Response
 ```
 
-### Scenario D: Multi-Source Fallback (Handling "Not Found")
+### Scenario D: Structured Data & External Systems (SQL, Cosmos, SharePoint)
+*The Agent dynamically selects the correct tool based on the user's intent, supporting any new MCP server.*
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Orch as Agent Orchestrator
+    participant LLM as Azure OpenAI
+    participant SQL as SQL/Cosmos/SharePoint
+
+    User->>Orch: "Show me the logs from last week"
+    Orch->>Redis: Check Cache (Miss)
+
+    Orch->>LLM: Send Query
+    Note over LLM: Intent Recognition: "logs" -> Structured Query
+    LLM-->>Orch: Call Tool: query_cosmos("SELECT * FROM c WHERE...")
+
+    Orch->>SQL: Execute Query
+    SQL-->>Orch: Returns JSON Results
+
+    Orch->>LLM: Send Data
+    LLM-->>Orch: Final Answer (Synthesis)
+
+    Orch->>User: Stream Response
+```
+
+### Scenario E: Multi-Source Fallback (Handling "Not Found")
 *Ensures robust behavior when primary sources fail.*
 
 ```mermaid

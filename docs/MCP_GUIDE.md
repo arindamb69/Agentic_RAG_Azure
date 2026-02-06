@@ -38,32 +38,43 @@ AZURE_BLOB_CONNECTION_STRING="DefaultEndpointsProtocol=https;..."
 
 ## 3. Register with Agent Orchestrator
 
-Currently, the `AgentOrchestrator` in `backend/agent_orchestrator.py` manually maps tools. To enable your new MCP server, you need to add a method that interfaces with it.
+The `AgentOrchestrator` in `backend/agent_orchestrator.py` uses a **Tool Schema** and a **Dispatch Loop** to manage MCP matches.
 
-*Note: In a fully productionized version, you would use an MCP Client to automatically discover tools from running MCP servers. For this MVP, we explicitly define the interface.*
-
-Open `backend/agent_orchestrator.py` and add your tool:
+1. **Add to `TOOLS_SCHEMA`**: Define the tool's interface so the LLM knows how to call it.
 
 ```python
-class AgentOrchestrator:
-    def __init__(self):
-        self.tools = {
-            "azure_search": self.tool_azure_search,
-            "blob_storage": self.tool_blob_storage,
-            "sql_db": self.tool_sql_db, # <--- Add this
+# backend/agent_orchestrator.py
+TOOLS_SCHEMA = [
+    # ... existing tools ...
+    {
+        "type": "function",
+        "function": {
+            "name": "query_database", # Name of your tool
+            "description": "Executes a read-only SQL query.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query_string": {"type": "string", "description": "SQL query to run"}
+                },
+                "required": ["query_string"]
+            }
         }
-
-    # ... existing code ...
-
-    async def tool_sql_db(self, query: str):
-        # Option A: Import directly if running in same process (Simplest for MVP)
-        # from mcp_servers.mcp_sql import query_database
-        # return await query_database(query)
-        
-        # Option B: Call as external process (Standard MCP way)
-        # In a real scenario, you'd use the mcp-python-sdk client here.
-        return f"[SQL Result] Mock result for {query}"
+    }
+]
 ```
+
+2. **Add to Dispatch Logic**: Update the `process_query` method to handle the new tool name.
+
+```python
+# backend/agent_orchestrator.py
+
+# Inside the 'for tool_call in response.tool_calls:' loop:
+elif fn_name == "query_database":
+    from mcp_servers.mcp_sql import query_database
+    tool_result = await query_database(fn_args['query_string'])
+```
+
+*Note: For this MVP, we are importing the functions directly (`from mcp_servers...`) to run them in the same process, rather than spawning separate stdio processes.*
 
 ## 4. Testing Your MCP Server
 
