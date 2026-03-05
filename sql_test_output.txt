@@ -1,0 +1,10 @@
+Starting SQL Connection Test (Token Auth)...
+Target Server: tcp:agentragsql.database.windows.net,1433
+Target Database: agentragsql
+Acquiring Access Token via DefaultAzureCredential...
+Attempting to connect with Access Token...
+
+CONNECTION FAILED: ('28000', "[28000] [Microsoft][ODBC Driver 18 for SQL Server][SQL Server]Login failed for user '<token-identified principal>'. (18456) (SQLDriverConnect); [28000] [Microsoft][ODBC Driver 18 for SQL Server]Invalid connection string attribute (0); [28000] [Microsoft][ODBC Driver 18 for SQL Server][SQL Server]Login failed for user '<token-identified principal>'. (18456); [28000] [Microsoft][ODBC Driver 18 for SQL Server]Invalid connection string attribute (0)")
+Troubleshooting tips:
+1. Ensure you are logged in via 'az login' and the session is active.
+2. Ensure your user is an Active Directory Admin on the SQL Server.

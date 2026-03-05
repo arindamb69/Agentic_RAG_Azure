@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true });
+  </script>
+</head>
+<body>
+  <h2>Test 1: subgraph ID [Title with space]</h2>
+  <div class="mermaid">
+    flowchart LR
+    subgraph CH [Sales Channels]
+      A[test]
+    end
+  </div>
+  
+  <h2>Test 2: subgraph ID ["Title with space"]</h2>
+  <div class="mermaid">
+    flowchart LR
+    subgraph CH ["Sales Channels"]
+      A[test]
+    end
+  </div>
+</body>
+</html>

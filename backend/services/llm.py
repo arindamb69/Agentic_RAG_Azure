@@ -43,7 +43,7 @@ class LLMService:
             self.client = None
             self.is_mock = True
 
-    async def generate_response(self, messages, tools=None):
+    async def generate_response(self, messages, tools=None, api_key=None):
         print(f"LLM generate_response called. Mock: {self.is_mock}")
         if self.is_mock:
             # Simple mock response
@@ -52,21 +52,19 @@ class LLMService:
                 "tool_calls": None
             })
         
+        # Use provided api_key or fallback to settings
+        target_api_key = api_key if api_key else settings.AZURE_OPENAI_API_KEY
+        
         try:
             if getattr(self, 'use_direct_http', False):
                 # Direct HTTP Implementation for Custom Gateway
                 url = f"{self.custom_endpoint}?api-version={settings.AZURE_OPENAI_API_VERSION}"
                 headers = {
-                    "api-key": settings.AZURE_OPENAI_API_KEY,
+                    "api-key": target_api_key,
                     "Content-Type": "application/json"
                 }
-                # Gateway seems to auto-detect model, but we can try sending it if needed.
-                # Debug script worked WITHOUT model. Let's send everything except model if possible,
-                # or send it and hope it's ignored.
-                # Actually, standard OpenAI has 'model', but this gateway might behave differently.
                 payload = {
                     "messages": messages,
-                    # "model": self.deployment, # Commented out based on debug success
                 }
                 if tools:
                     payload["tools"] = tools
@@ -82,8 +80,19 @@ class LLMService:
                 return FakeMessage(data['choices'][0]['message'])
 
             # Standard SDK Call
-            response = await self.client.chat.completions.create(
-                model=self.deployment,
+            # If a dynamic API key is provided, we might need a temporary client or update the existing one
+            # For simplicity and thread-safety, let's create a temporary client if key differs
+            client_to_use = self.client
+            if api_key and api_key != settings.AZURE_OPENAI_API_KEY:
+                client_to_use = AsyncAzureOpenAI(
+                    azure_endpoint=settings.AZURE_OPENAI_ENDPOINT,
+                    api_key=api_key,
+                    api_version=settings.AZURE_OPENAI_API_VERSION,
+                    http_client=self.http_client
+                )
+
+            response = await client_to_use.chat.completions.create(
+                model=settings.AZURE_OPENAI_DEPLOYMENT,
                 messages=messages,
                 tools=tools
             )

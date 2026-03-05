@@ -35,6 +35,11 @@ class MemoryService:
                     doc = {"id": session_id, "messages": []}
                 
                 doc["messages"].append(message)
+                
+                # Truncate to prevent 2MB document limit and keep RU costs low
+                if len(doc["messages"]) > 20:
+                    doc["messages"] = doc["messages"][-20:]
+                    
                 self.container.upsert_item(doc)
             except Exception as e:
                 print(f"Error saving to Cosmos Memory: {e}")

@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11.12.3/dist/mermaid.esm.min.mjs';
+        mermaid.initialize({ startOnLoad: true });
+    </script>
+</head>
+
+<body>
+    <h2>Test 3: User Nested</h2>
+    <div class="mermaid">
+        flowchart LR
+        subgraph Clients
+        U1["Web App User"]
+        U2["API Client"]
+        end
+
+        GW["API Gateway / Frontend Backend"]
+
+        subgraph Agent_Platform [AI Agent Platform]
+        ORCH["Orchestrator Agent"]
+
+        subgraph SubAgents [Specialized Sub-Agents]
+        A1["Data Agent"]
+        end
+        end
+    </div>
+</body>
+
+</html>

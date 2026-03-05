@@ -17,7 +17,7 @@ TOOLS_SCHEMA = [
         "type": "function",
         "function": {
             "name": "azure_search",
-            "description": "Semantic search across the indexed knowledge base. Use this for general questions or when looking for information across many documents.",
+            "description": "Semantic search across the indexed knowledge base. Use this as the FIRST STEP for general questions or when looking for information in unstructured documents/PDFs.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -31,7 +31,7 @@ TOOLS_SCHEMA = [
         "type": "function",
         "function": {
             "name": "sql_query",
-            "description": "Query structured data from SQL database (sales, inventory, users).",
+            "description": "Query STRUCTURED/RELATIONAL data from SQL database ONLY (e.g. sales, inventory, revenue, users). Use this if the question involves counting, aggregating, or filtering structured records.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -102,7 +102,7 @@ TOOLS_SCHEMA = [
         "type": "function",
         "function": {
             "name": "list_blob_containers",
-            "description": "List all containers in Azure Blob Storage.",
+            "description": "List all containers in Azure Blob Storage. Use this to DISCOVER which storage areas exist if the user mentions files, media, or broad storage.",
             "parameters": {
                 "type": "object",
                 "properties": {}
@@ -113,12 +113,12 @@ TOOLS_SCHEMA = [
         "type": "function",
         "function": {
             "name": "list_blobs",
-            "description": "List blobs in a specific Azure Blob Storage container.",
+            "description": "List all individual files (blobs) in a specific container. Use this to FIND a specific filename if you don't already have the exact name.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "container": {"type": "string", "description": "Container name"},
-                    "prefix": {"type": "string", "description": "Optional prefix to filter blobs"}
+                    "prefix": {"type": "string", "description": "Optional prefix to filter list"}
                 },
                 "required": ["container"]
             }
@@ -128,7 +128,7 @@ TOOLS_SCHEMA = [
         "type": "function",
         "function": {
             "name": "read_blob",
-            "description": "Directly read the raw content of a specific file (blob) from storage. Use this if you have a specific filename or if you need to inspect the details of a file not found in semantic search.",
+            "description": "Directly read the raw content of a specific file from storage. Use this AFTER finding a filename via 'list_blobs' or if the user provides an exact path.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -143,12 +143,12 @@ TOOLS_SCHEMA = [
         "type": "function",
         "function": {
             "name": "query_cosmos",
-            "description": "Query unstructured JSON data in Azure Cosmos DB NoSQL containers using SQL syntax.",
+            "description": "Query unstructured JSON data/documents in Azure Cosmos DB ONLY. Use this if the user mentions 'collections', 'NoSQL', 'JSON documents', or 'Cosmos'. NOTE: This Cosmos DB environment FULLY SUPPORTS advanced SQL operations like GROUP BY, ORDER BY, COUNT(), SUM(), AVG(), MIN(), MAX(), and spatial functions. Write full server-side queries instead of client-side aggregations.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "collection_name": {"type": "string", "description": "Container name to query"},
-                    "sql_query": {"type": "string", "description": "Cosmos SQL query, e.g. SELECT * FROM c WHERE c.type = 'log'"}
+                    "collection_name": {"type": "string", "description": "The collection/container name to query"},
+                    "sql_query": {"type": "string", "description": "SQL-like query, e.g. SELECT c.category, COUNT(1) FROM c GROUP BY c.category"}
                 },
                 "required": ["collection_name"]
             }
@@ -158,7 +158,7 @@ TOOLS_SCHEMA = [
         "type": "function",
         "function": {
             "name": "list_cosmos_collections",
-            "description": "List all collections in the Cosmos DB database.",
+            "description": "List all collections in the Cosmos DB database. Use this to DISCOVER which NoSQL datasets are available.",
             "parameters": {
                 "type": "object",
                 "properties": {}
@@ -195,80 +195,68 @@ class AgentOrchestrator:
         # Remove punctuation from end
         return q.rstrip("?.!")
 
-    async def process_query(self, query: str, history: list):
-        session_id = "default_session" # In prod, extract from request headers
+    async def process_query(self, query: str, history: list = None, api_key: str = None):
+        session_id = "default_session"
+        if history is None:
+            history = []
         
         print(f"Orchestrator: Processing query '{query}'")
         
         # 1. Save User Message
         self.memory.save_message(session_id, "user", query)
 
-        # 2. Check Cache with Normalized Key
+        # 2. Check Cache
         normalized_key = self._normalize_query(query)
-        print(f"Orchestrator: Checking cache for key 'query:{normalized_key}'")
-        
         cached_response = self.cache.get(f"query:{normalized_key}")
         if cached_response:
-            print("Orchestrator: Cache hit")
             yield {"type": "thought", "content": "Cache hit! Retrieved response from Redis."}
             yield {"type": "chunk", "content": cached_response}
             yield {"type": "complete", "tokens": 0}
             return
 
-        yield {"type": "thought", "content": "Analyzing request with Azure OpenAI..."}
-        
-        # 3. Construct Context (Optimized with Summarization)
-        # Instead of sending all raw history, we ideally summarize older turns.
-        # For this implementation, we will perform a lightweight truncation/selection
-        # to ensure we don't blow up the context window with large tool outputs from previous turns.
+        yield {"type": "thought", "content": "Analyzing request and selecting data sources..."}
         
         system_prompt = (
-            "You are a helpful Azure Agent. You have access to various tools to retrieve information.\n"
-            "Retrieval Strategy:\n"
-            "1. Use 'azure_search' for general knowledge or semantic questions.\n"
-            "2. Use 'search_confluence' for technical documentation, setup guides, wikis, and verified internal procedures.\n"
-            "   - CRITICAL: If 'search_confluence' returns a list of pages, you MUST select the most relevant Page ID and IMMEDIATELY call 'read_confluence_page' to read its content. The search result alone is NOT enough to answer.\n"
-            "3. If the user mentions a specific file (like a PDF), or if other searches return no results, "
-            "check Azure Blob Storage using 'list_blob_containers', 'list_blobs', and 'read_blob'.\n"
-            "4. If you find a relevant file in blob storage, use 'read_blob' to extract its contents.\n"
-            "5. IMPORTANT: You must ONLY answer based on the information retrieved from the tools (Search, SQL, Confluence, Blob Storage).\n"
-            "   - If the tools return relevant information, use it to answer.\n"
-            "   - If a tool returns an Error (e.g., connection failed, timeout), please report this technical issue to the user so they are aware.\n"
-            "   - If the tools run successfully but return no results or irrelevant information, try another source. If ALL sources fail, simply state: 'I could not find relevant information in the connected data sources.'\n"
-            "   - Do NOT use your internal training data to answer if the tools fail or find nothing."
+            "You are an expert Azure Enterprise AI Agent. Your goal is to provide accurate, data-driven answers by orchestrating multiple tools.\n\n"
+            "CRITICAL SEARCH & FALLBACK PLANNING RULES:\n"
+            "If information is NOT found in `azure_search` (or as a proactive plan when certain keywords are present), follow these strict logic rules:\n"
+            "1. CONFLUENCE FALLBACK: If the user asks for documents, documentation, or procedures WITHOUT mentioning the keyword 'file', and `azure_search` has no results, you MUST search Confluence.\n"
+            "2. STORAGE FALLBACK: If the user mentions the keyword 'file' (e.g., 'check the file', 'upload file', 'find file xyz'), skip general search or after it fails, you MUST perform storage discovery:\n"
+            "   - Step A: `list_blob_containers` to identify the right area.\n"
+            "   - Step B: `list_blobs` in likely containers.\n"
+            "   - Step C: `read_blob` once you have the name.\n"
+            "3. SQL FALLBACK: If the user mentions 'table', 'records', or structured data concepts (revenue, inventory), you MUST check `sql_query`.\n"
+            "4. COSMOSDB FALLBACK: If the user mentions 'collection', 'logs', 'items', or 'NoSQL documents', you MUST use `list_cosmos_collections` and `query_cosmos`.\n\n"
+            "FORMATTING RULES:\n"
+            "- Use code blocks (```language) ONLY for multi-line code, full SQL queries, or JSON data. NEVER wrap single words, names, or short technical terms in backticks.\n"
+            "- CRITICAL: When using the `generate_diagram` tool, the tool will return raw code. YOU MUST wrap that returned code inside a standard markdown code block with the correct language identifier (i.e. ```mermaid or ```plantuml) so it renders properly in the UI.\n"
+            "- Use **bold** for important names and *italics* for emphasis.\n"
+            "- Use double newlines between paragraphs for clear readability.\n"
+            "- Be persistent. If one tool fails, reason about where else the data might be and try that tool. Your priority is to exhaust all relevant connected sources before saying 'not found'."
         )
-        
+
         messages = [{"role": "system", "content": system_prompt}]
         
-        # Optimization: Filter and truncate history
-        for msg in history[-5:]: 
+        # Add history (last 10 turns)
+        for msg in history[-10:]:
             content = msg.get('content', '')
             role = msg.get('role', '')
-            
-            # Truncate very long tool outputs in history to save tokens
             if role == "tool" and len(content) > 2000:
-                content = content[:2000] + "... [Truncated for Context Optimization]"
-            
-            # Truncate long assistant messages if they are just data dumps
-            if role == "assistant" and len(content) > 3000:
-                content = content[:3000] + "... [Truncated]"
-
-            if content:
-               messages.append({"role": role, "content": content})
+                content = content[:2000] + "... [Truncated]"
+            messages.append({"role": role, "content": content})
         
         # Add current query
         messages.append({"role": "user", "content": query})
 
         # 4. Agent Reasoning Loop (Multi-Step)
-        MAX_ITERATIONS = 5
-        response_text = ""
+        MAX_ITERATIONS = 8
         
         for iteration in range(MAX_ITERATIONS):
             print(f"Orchestrator: Iteration {iteration + 1}...")
             
             try:
                 # Call LLM with Tools
-                response = await self.llm.generate_response(messages, tools=TOOLS_SCHEMA)
+                response = await self.llm.generate_response(messages, tools=TOOLS_SCHEMA, api_key=api_key)
             except Exception as e:
                 print(f"Orchestrator: LLM Call Failed: {e}")
                 yield {"type": "chunk", "content": f"Error contacting AI: {e}"}
@@ -365,10 +353,11 @@ class AgentOrchestrator:
         
         yield {"type": "thought", "content": "Synthesizing final answer..."}
         
-        words = response_text.split(" ")
-        for word in words:
-            yield {"type": "chunk", "content": word + " "}
-            await asyncio.sleep(0.02)
+        # Send in larger chunks of 5-10 chars to simulate typing without breaking newlines/formatting
+        chunk_size = 10
+        for i in range(0, len(response_text), chunk_size):
+            yield {"type": "chunk", "content": response_text[i:i+chunk_size]}
+            await asyncio.sleep(0.01)
 
         # 6. Save Assistant Message & Cache
         self.memory.save_message(session_id, "assistant", response_text)
@@ -394,4 +383,6 @@ class AgentOrchestrator:
         else:
             print(f"Orchestrator: Skipping cache for failed/empty response.")
         
-        yield {"type": "complete", "tokens": len(words) * 1.3} # Est
+        # Estimate tokens based on words
+        estimated_tokens = int(len(response_text.split(" ")) * 1.3)
+        yield {"type": "complete", "tokens": estimated_tokens}

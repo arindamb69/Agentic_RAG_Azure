@@ -11,12 +11,16 @@
   },
   "dependencies": {
     "@fluentui/react-components": "^9.72.11",
+    "@types/pako": "^2.0.4",
     "clsx": "^2.1.1",
+    "jsdom": "^28.1.0",
     "lucide-react": "^0.563.0",
+    "mermaid": "^11.12.3",
+    "pako": "^2.1.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-markdown": "^10.1.0",
-    "tailwind-merge": "^3.4.0",
+    "tailwind-merge": "^3.5.0",
     "tailwindcss-animate": "^1.0.7"
   },
   "devDependencies": {

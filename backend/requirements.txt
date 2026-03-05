@@ -13,3 +13,7 @@ httpx
 sse-starlette
 mcp
 pymupdf
+pyodbc
+fpdf2
+pillow
+python-multipart

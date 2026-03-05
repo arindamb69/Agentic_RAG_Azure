@@ -1,8 +1,102 @@
 @import "tailwindcss";
 
 @layer base {
-  body {
-    background-color: #f0f9ff;
-    color: #0f172a;
+  :root {
+    --brand-blue: #2563eb;
+    --brand-indigo: #4338ca;
+    --brand-dark: #0f172a;
+    --brand-bg: #f8fafc;
   }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background-color: var(--brand-bg);
+    color: var(--brand-dark);
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Glassmorphism Classes */
+.glass {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+/* Markdown Styling for Chat Messages */
+.prose {
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
+.prose p {
+  margin-bottom: 1.25rem;
+}
+
+.prose p:last-child {
+  margin-bottom: 0;
+}
+
+.prose ul,
+.prose ol {
+  margin-bottom: 1.25rem;
+  padding-left: 1.5rem;
+}
+
+.prose li {
+  margin-bottom: 0.5rem;
+}
+
+.prose code {
+  background-color: #f1f5f9;
+  padding: 0.2rem 0.4rem;
+  border-radius: 0.4rem;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.85em;
+  color: #c026d3;
+  font-weight: 500;
+}
+
+.prose pre {
+  background-color: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 1rem;
+  margin: 1.5rem 0;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+}
+
+.prose h1, .prose h2, .prose h3 {
+  color: #0f172a;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  margin-top: 2rem;
+}
+
+.prose blockquote {
+  border-left: 4px solid #2563eb;
+  background: #f0f7ff;
+  border-radius: 0 0.5rem 0.5rem 0;
+  padding: 1rem 1.5rem;
+  font-style: italic;
+  margin: 1.5rem 0;
 }

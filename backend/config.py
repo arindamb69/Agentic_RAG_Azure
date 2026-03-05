@@ -14,6 +14,11 @@ class Settings:
     AZURE_SEARCH_ENDPOINT = os.getenv("AZURE_SEARCH_ENDPOINT", "")
     AZURE_SEARCH_KEY = os.getenv("AZURE_SEARCH_KEY", "")
     AZURE_SEARCH_INDEX = os.getenv("AZURE_SEARCH_INDEX", "rag-index")
+    
+    # Custom Search (Volvo AI Hub)
+    SEARCH_PROVIDER = os.getenv("SEARCH_PROVIDER", "azure")
+    CUSTOM_SEARCH_URL = os.getenv("CUSTOM_SEARCH_URL", "")
+    CUSTOM_SEARCH_API_KEY = os.getenv("CUSTOM_SEARCH_API_KEY", "")
 
     # Memory (Cosmos DB Mongo API)
     COSMOS_CONNECTION_STRING = os.getenv("COSMOS_CONNECTION_STRING", "")
