@@ -17,6 +17,11 @@ export interface Message {
     thoughts?: string[];
     metrics?: Metrics;
     isThinking?: boolean;
+    metadata?: {
+        type: 'file_upload' | 'other';
+        fileName?: string;
+        fileSize?: number;
+    }
 }
 
 interface ChatMessageProps {
@@ -235,7 +240,9 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
                             }
                         }}
                     >
-                        {message.content}
+                        {message.metadata?.type === 'file_upload' 
+                          ? `📄 File: **${message.metadata.fileName}** (${(message.metadata.fileSize || 0) / 1024 > 1024 ? ((message.metadata.fileSize || 0) / (1024 * 1024)).toFixed(1) + 'MB' : ((message.metadata.fileSize || 0) / 1024).toFixed(1) + 'KB'})\n\n*(Content processed by assistant)*`
+                          : message.content}
                     </ReactMarkdown>
                 </div>
 

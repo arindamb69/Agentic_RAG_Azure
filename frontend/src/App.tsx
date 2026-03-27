@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import {
   Plus, MessageSquare, Settings, ChevronLeft, ChevronRight,
-  Send, Upload, Mic, Sparkles, Trash2, Clock, Copy, Download
+  Send, Upload, Mic, Sparkles, Trash2, Copy, Download
 } from 'lucide-react'
 import { ChatMessage, type Message } from './components/ChatMessage'
 import clsx from 'clsx'
@@ -141,11 +141,21 @@ function App() {
       } else {
         // Automatically ask the agent about the file
         const prefix = `I uploaded a file named "${file.name}". `;
-        const query = prefix + (data.text ? `Here is the extracted content / insight: \n\n${data.text} ` : "Please analyze this file.");
+        const fileQuery = prefix + (data.text ? `Here is the extracted content / insight: \n\n${data.text} ` : "Please analyze this file.");
 
-        // Add a hidden system message or just prefix the user query
-        // For better UX, we'll just put the text in the input or send it immediately
-        handleSubmit(undefined, query);
+        // Add a message with metadata so the UI can render it as a file
+        const userMessage: Message = { 
+          role: 'user', 
+          content: fileQuery,
+          metadata: {
+            type: 'file_upload',
+            fileName: file.name,
+            fileSize: file.size
+          }
+        };
+        
+        // Use the core submit logic
+        await handleMessageSubmit(userMessage);
       }
     } catch (error) {
       console.error("Upload failed", error);
@@ -158,10 +168,16 @@ function App() {
 
   const handleSubmit = async (e?: React.FormEvent, overrideInput?: string) => {
     if (e) e.preventDefault()
-    const query = overrideInput || input
-    if (!query.trim() || isLoading) return
+    const queryStr = overrideInput || input
+    if (!queryStr.trim() || isLoading) return
 
-    const userMessage: Message = { role: 'user', content: query }
+    const userMessage: Message = { role: 'user', content: queryStr }
+    await handleMessageSubmit(userMessage)
+  }
+
+  const handleMessageSubmit = async (userMessage: Message) => {
+    if (isLoading) return
+    
     const updatedMessages = [...messages, userMessage]
     setMessages(updatedMessages)
     setInput('')
@@ -173,7 +189,7 @@ function App() {
       activeId = Date.now().toString();
       const newChat: Chat = {
         id: activeId,
-        title: query.slice(0, 30) + (query.length > 30 ? '...' : ''),
+        title: userMessage.content.split('\n')[0].slice(0, 40) + '...',
         messages: updatedMessages,
         createdAt: Date.now()
       };
@@ -212,7 +228,6 @@ function App() {
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
       let buffer = ''
-      let fullAssistantContent = ''
 
       while (true) {
         const { done, value } = await reader.read()
@@ -239,7 +254,6 @@ function App() {
                   lastMsg.thoughts = [...(lastMsg.thoughts || []), data.content]
                 } else if (data.type === 'chunk') {
                   lastMsg.content += data.content
-                  fullAssistantContent = lastMsg.content
                 } else if (data.type === 'metrics') {
                   lastMsg.metrics = {
                     duration_ms: data.duration_ms,

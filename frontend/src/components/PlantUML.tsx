@@ -13,7 +13,7 @@ export const PlantUML: React.FC<PlantUMLProps> = ({ code }) => {
         // 3. Base64 URL Safe encoded
 
         const data = new TextEncoder().encode(code);
-        const compressed = pako.deflateRaw(data, { level: 9 });
+        const compressed = pako.deflate(data, { level: 9 });
 
         // Robust Base64 conversion
         let binary = '';
