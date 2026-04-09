@@ -49,25 +49,45 @@ class MediaService:
             # Use GPT-4o Vision for OCR and description
             base64_image = base64.b64encode(content).decode('utf-8')
             
-            response = await self.client.chat.completions.create(
-                model=self.deployment,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are an assistant that extracts text and describes images accurately. If there is text, transcribe it. If there are charts/diagrams, explain them."
-                    },
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": "Extract all text and summarize this image."},
-                            {"type": "image_url", "image_url": {"url": f"data:{content_type};base64,{base64_image}"}}
-                        ]
-                    }
-                ],
-                max_tokens=1000
-            )
+            messages = [
+                {
+                    "role": "system",
+                    "content": "You are an assistant that extracts text and describes images accurately. If there is text, transcribe it. If there are charts/diagrams, explain them."
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Extract all text and summarize this image."},
+                        {"type": "image_url", "image_url": {"url": f"data:{content_type};base64,{base64_image}"}}
+                    ]
+                }
+            ]
             
-            insights = response.choices[0].message.content
+            if "chat/completions" in self.endpoint:
+                import httpx
+                headers = {
+                    "api-key": self.api_key,
+                    "Content-Type": "application/json"
+                }
+                payload = {
+                    "messages": messages,
+                    "max_completion_tokens": 1000
+                }
+                async with httpx.AsyncClient(verify=False, timeout=120) as http_client:
+                    url = f"{self.endpoint}?api-version={self.api_version}"
+                    resp = await http_client.post(url, json=payload, headers=headers)
+                    if resp.status_code != 200:
+                        raise Exception(f"Image API Error {resp.status_code}: {resp.text}")
+                    data = resp.json()
+                    insights = data['choices'][0]['message']['content']
+            else:
+                response = await self.client.chat.completions.create(
+                    model=self.deployment,
+                    messages=messages,
+                    max_completion_tokens=1000
+                )
+                insights = response.choices[0].message.content
+            
             return {"text": insights, "type": "image", "raw_content": base64_image}
         except Exception as e:
             return {"error": f"Image processing failed: {str(e)}", "type": "error"}
